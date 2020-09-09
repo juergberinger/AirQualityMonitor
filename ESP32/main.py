@@ -14,8 +14,8 @@ import uasyncio as asyncio
 display_config = {
     # each entry is a triple (text,x_pos,y_pos), negative pos_x means right-aligned text
     'title': ('Air Monitor v%s' % __version__,0,0),
-    'dht_temp': ('%.1fC',-16,3),
-    'dht_humidity': ('%.0f%%',-16,4),
+    'dht_temp': ('%4.1fC',-16,3),
+    'dht_humidity': ('%3.0f%%',-16,4),
     'heartbeat': ('debug %i/%i',-16,7)
 }
 
