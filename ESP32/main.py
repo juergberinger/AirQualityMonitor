@@ -6,8 +6,18 @@ __version__ = "0.1"
 
 import machine
 import ssd1306
-from dht import DHT22
+import dht
 import uasyncio as asyncio
+
+
+# Configuration and display
+display_config = {
+    # each entry is a triple (text,x_pos,y_pos), negative pos_x means right-aligned text
+    'title': ('Air Monitor v%s' % __version__,0,0),
+    'dht_temp': ('%.1fC',-16,3),
+    'dht_humidity': ('%.0f%%',-16,4),
+    'heartbeat': ('debug %i/%i',-16,7)
+}
 
 
 # Global variables
@@ -16,7 +26,7 @@ dht_sensor = None
 current_temp = 0
 current_humidity = 0
 n_measure_temp = 0
-n_display = 0
+n_main = 0
 
 
 def hardware_init():
@@ -27,18 +37,29 @@ def hardware_init():
     pin.value(1)  # while OLED is running, must set GPIO16 in high
     global oled
     oled = ssd1306.SSD1306_I2C(128, 64, i2c)
-    oled.fill(0)
-    oled.text('Air Monitor v%s' % __version__, 0, 0)
-    oled.show()
+    oled.fill(0)  # erase screen to black
     global dht_sensor
-    dht_sensor = DHT22(machine.Pin(17))
+    dht_sensor = dht.DHT22(machine.Pin(17))
 
 
 def oled_write(text, posX, posY):
-    """Write text to OLED display (assuming 8x8 font)"""
+    """Write text to OLED display (assuming 8x8 font)
+
+    Negative posX means right-aligned test."""
+    if posX<0:
+        posX = -posX-len(text)
     oled.fill_rect(posX * 8, posY * 8, len(text) * 8, 8, 0)
     oled.text(text, posX * 8, posY * 8)
     oled.show()
+
+
+def display(what, values=None):
+    """Show value on oled display as configure in display_config"""
+    fmt = display_config[what]
+    if values is None:
+        oled_write(*fmt)
+    else:
+        oled_write(fmt[0] % values, fmt[1], fmt[2])
 
 
 async def measure_temp():
@@ -50,6 +71,8 @@ async def measure_temp():
         dht_sensor.measure()
         current_temp = dht_sensor.temperature()
         current_humidity = dht_sensor.humidity()
+        display('dht_temp',current_temp)
+        display('dht_humidity',current_humidity)
         n_measure_temp += 1
 
 
@@ -66,12 +89,11 @@ def set_global_exception():
 async def main():
     set_global_exception()
     asyncio.create_task(measure_temp())
-    global n_display
+    global n_main
+    display('title')
     while True:
-        oled_write('Temp = %3.1f C' % current_temp,0,3)
-        oled_write('#measure = %5i' % n_measure_temp,0,5)
-        oled_write('#display = %5i' % n_display,0,6)
-        n_display += 1
+        display('heartbeat', (n_measure_temp, n_main))
+        n_main += 1
         await asyncio.sleep_ms(100)
 
 
