@@ -5,6 +5,7 @@
       <option name="ignoredIdentifiers">
         <list>
           <option value="dht" />
+          <option value="uasyncio" />
         </list>
       </option>
     </inspection_tool>
