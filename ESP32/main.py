@@ -8,6 +8,7 @@ import machine
 import ssd1306
 import dht
 import uasyncio as asyncio
+import pms5003
 
 
 # Configuration and display
@@ -16,6 +17,7 @@ display_config = {
     'title': ('Air Monitor v%s' % __version__,0,0),
     'dht_temp': ('%4.1fC',-16,3),
     'dht_humidity': ('%3.0f%%',-16,4),
+    'pms_25': ('%3i ug/m3',0,7),
     'debug': ('debug %i/%i',-16,7)
 }
 
@@ -73,6 +75,19 @@ class DHTSensor:
             self.n_measurements += 1
 
 
+class PMSSensor:
+    """PMS5003 particle concentration sensor."""
+
+    def __init__(self, display, toPmsPin, fromPmsPin):
+        self.display = display
+        self.uart = machine.UART(1, tx=toPmsPin, rx=fromPmsPin, baudrate=9600)
+        self.pm = pms5003.PMS5003(self.uart)
+        self.pm.registerCallback(self.show)
+
+    def show(self):
+        self.display.show('pms_25', self.pm.pm25_env)
+
+
 def set_global_exception():
     """Global exception handler to abort on unhandled exception."""
     def handle_exception(loop, context):
@@ -90,6 +105,8 @@ async def main():
     display.show('title')
     global dht_sensor
     dht_sensor = DHTSensor(display,17)
+    global pms_sensor
+    pms_sensor = PMSSensor(display,14,27)
     global n_heartbeat
     n_heartbeat = 0
     delay = 100
