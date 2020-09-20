@@ -37,7 +37,7 @@ except ImportError:
     import ustruct as struct
 
 # Sensor settling after wakeup requires at least 30 seconds (sensor sepcifications).
-WAIT_AFTER_WAKEUP = 40
+WAIT_AFTER_WAKEUP = 10
 
 # Normal data frame length.
 DATA_FRAME_LENGTH = 28
