@@ -12,14 +12,36 @@ import pms5003
 
 
 # Configuration and display
+smoke_corr_factor = 0.48
+
 display_config = {
     # each entry is a triple (text,x_pos,y_pos), negative pos_x means right-aligned text
     'title': ('Air Monitor v%s' % __version__,0,0),
     'dht_temp': ('%4.1fC',-16,3),
     'dht_humidity': ('%3.0f%%',-16,4),
+    'aqi': ('AQI = %3.0f', 0,3),
+    'aqismoke': ('Smoke %3.0f', 0,4),
     'pms_25': ('%3i ug/m3',0,7),
     'debug': ('debug %i/%i',-16,7)
 }
+
+
+def aqi(concentration):
+    """Convert PM 2.5 concentration to AQI."""
+    if concentration <= 12.:
+        return round(4.1667 * concentration)
+    elif concentration <= 35.4:
+        return round(2.1030 * (concentration - 12.1) + 51.)
+    elif concentration <= 55.4:
+        return round(2.4623 * (concentration - 35.5) + 101.)
+    elif concentration <= 150.4:
+        return round(0.5163 * (concentration - 55.5) + 151.)
+    elif concentration <= 250.4:
+        return round(0.9910 * (concentration - 150.5) + 201.)
+    elif concentration <= 500.4:
+        return round(0.7963 * (concentration - 250.5) + 301.)
+    else:
+        return 999.
 
 
 class Display:
@@ -85,6 +107,8 @@ class PMSSensor:
         self.pm.registerCallback(self.show)
 
     def show(self):
+        self.display.show('aqi', aqi(self.pm.pm25_env))
+        self.display.show('aqismoke', aqi(self.pm.pm25_env*smoke_corr_factor))
         self.display.show('pms_25', self.pm.pm25_env)
 
 
