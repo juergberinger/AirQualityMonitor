@@ -100,9 +100,9 @@ class DHTSensor:
 class PMSSensor:
     """PMS5003 particle concentration sensor."""
 
-    def __init__(self, display, toPmsPin, fromPmsPin):
+    def __init__(self, display, to_pms_pin, from_pms_pin):
         self.display = display
-        self.uart = machine.UART(1, tx=toPmsPin, rx=fromPmsPin, baudrate=9600)
+        self.uart = machine.UART(1, tx=to_pms_pin, rx=from_pms_pin, baudrate=9600)
         self.pm = pms5003.PMS5003(self.uart)
         self.pm.registerCallback(self.show)
 
@@ -111,6 +111,21 @@ class PMSSensor:
         self.display.show('aqismoke', aqi(self.pm.pm25_env*smoke_corr_factor))
         self.display.show('pms_25', self.pm.pm25_env)
 
+
+class RGBLed:
+
+    def __init__(self, red_pin, green_pin, blue_pin):
+        self.red = machine.PWM(machine.Pin(red_pin),freq=1000)
+        self.green = machine.PWM(machine.Pin(green_pin),freq=1000)
+        self.blue = machine.PWM(machine.Pin(blue_pin),freq=1000)
+        self.set_channel(self.red,0)
+        self.set_channel(self.green,0)
+        self.set_channel(self.blue,0)
+
+    def set_channel(self, pin, value):
+        """Set LED color value to brightness between 0 and 255."""
+        v = int((255-int(value))/255.*1023.)
+        pin.duty(v)
 
 def set_global_exception():
     """Global exception handler to abort on unhandled exception."""
@@ -131,6 +146,8 @@ async def main():
     dht_sensor = DHTSensor(display,17)
     global pms_sensor
     pms_sensor = PMSSensor(display,14,27)
+    global rgb_led
+    rgb_led = RGBLed(23,22,19)
     global n_heartbeat
     n_heartbeat = 0
     delay = 100
