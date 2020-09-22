@@ -44,6 +44,23 @@ def aqi(concentration):
         return 999.
 
 
+def aqilevel(aqi):
+    """Return AQI level (g,y,o,r,p,m)."""
+    aqi = int(aqi)
+    if aqi <= 50:
+        return 'g'
+    elif aqi <= 100:
+        return 'y'
+    elif aqi <= 150:
+        return 'o'
+    elif aqi <= 200:
+        return 'r'
+    elif aqi <= 300:
+        return 'p'
+    else:
+        return 'm'
+
+
 class Display:
     """Utility class to display data on SSD1306 display."""
 
@@ -74,6 +91,22 @@ class Display:
             self.write(fmt[0] % values, fmt[1], fmt[2])
 
 
+class RGBLed:
+
+    def __init__(self, red_pin, green_pin, blue_pin):
+        self.red = machine.PWM(machine.Pin(red_pin),freq=1000)
+        self.green = machine.PWM(machine.Pin(green_pin),freq=1000)
+        self.blue = machine.PWM(machine.Pin(blue_pin),freq=1000)
+        self.set_channel(self.red,0)
+        self.set_channel(self.green,0)
+        self.set_channel(self.blue,0)
+
+    def set_channel(self, pin, value):
+        """Set LED color value to brightness between 0 and 255."""
+        v = int((255-int(value))/255.*1023.)
+        pin.duty(v)
+
+
 class DHTSensor:
     """Asynchronous measurement and display of temperature and humidity with DHT22 sensor."""
 
@@ -100,32 +133,24 @@ class DHTSensor:
 class PMSSensor:
     """PMS5003 particle concentration sensor."""
 
-    def __init__(self, display, to_pms_pin, from_pms_pin):
+    def __init__(self, display, led, to_pms_pin, from_pms_pin):
         self.display = display
+        self.led = led
+        self.aqi = None
+        self.aqismoke = None
+        self.aqilevel = None
         self.uart = machine.UART(1, tx=to_pms_pin, rx=from_pms_pin, baudrate=9600)
         self.pm = pms5003.PMS5003(self.uart)
         self.pm.registerCallback(self.show)
 
     def show(self):
-        self.display.show('aqi', aqi(self.pm.pm25_env))
-        self.display.show('aqismoke', aqi(self.pm.pm25_env*smoke_corr_factor))
+        self.aqi = aqi(self.pm.pm25_env)
+        self.aqismoke = aqi(self.pm.pm25_env*smoke_corr_factor)
+        self.aqilevel = aqilevel(self.aqismoke)
+        self.display.show('aqi', self.aqi)
+        self.display.show('aqismoke', self.aqismoke)
         self.display.show('pms_25', self.pm.pm25_env)
 
-
-class RGBLed:
-
-    def __init__(self, red_pin, green_pin, blue_pin):
-        self.red = machine.PWM(machine.Pin(red_pin),freq=1000)
-        self.green = machine.PWM(machine.Pin(green_pin),freq=1000)
-        self.blue = machine.PWM(machine.Pin(blue_pin),freq=1000)
-        self.set_channel(self.red,0)
-        self.set_channel(self.green,0)
-        self.set_channel(self.blue,0)
-
-    def set_channel(self, pin, value):
-        """Set LED color value to brightness between 0 and 255."""
-        v = int((255-int(value))/255.*1023.)
-        pin.duty(v)
 
 def set_global_exception():
     """Global exception handler to abort on unhandled exception."""
@@ -142,12 +167,12 @@ async def main():
     set_global_exception()
     display = Display(15,4,16)
     display.show('title')
+    global rgb_led
+    rgb_led = RGBLed(23, 22, 19)
     global dht_sensor
     dht_sensor = DHTSensor(display,17)
     global pms_sensor
-    pms_sensor = PMSSensor(display,14,27)
-    global rgb_led
-    rgb_led = RGBLed(23,22,19)
+    pms_sensor = PMSSensor(display,rgb_led,14,27)
     global n_heartbeat
     n_heartbeat = 0
     delay = 100
