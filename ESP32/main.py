@@ -25,6 +25,17 @@ display_config = {
     'debug': ('debug %i/%i',-16,7)
 }
 
+rgb_colors = {
+    # each entry is a triple (red, green, blue, blinking) with colors in [0,255] and blinking = false/true
+    'b': (0, 0, 0, False),
+    'g': (0, 100, 0, False),
+    'y': (100, 100, 0, False),
+    'o': (120, 20, 0, False),
+    'r': (150, 0, 0, False),
+    'p': (120, 0, 80, True),
+    'm': (50, 0, 20, True)
+}
+
 
 def aqi(concentration):
     """Convert PM 2.5 concentration to AQI."""
@@ -93,18 +104,42 @@ class Display:
 
 class RGBLed:
 
-    def __init__(self, red_pin, green_pin, blue_pin):
+    def __init__(self, red_pin, green_pin, blue_pin, blink_delay=500):
         self.red = machine.PWM(machine.Pin(red_pin),freq=1000)
         self.green = machine.PWM(machine.Pin(green_pin),freq=1000)
         self.blue = machine.PWM(machine.Pin(blue_pin),freq=1000)
-        self.set_channel(self.red,0)
-        self.set_channel(self.green,0)
-        self.set_channel(self.blue,0)
+        self.blink_delay = blink_delay
+        self.set_color('b')
+        asyncio.create_task(self._run())
 
     def set_channel(self, pin, value):
         """Set LED color value to brightness between 0 and 255."""
-        v = int((255-int(value))/255.*1023.)
+        if value>255:
+            value = 255
+        v = int(value/255.*1023.)
         pin.duty(v)
+
+    def set_rgb(self, r, g, b):
+        self.set_channel(self.red,r)
+        self.set_channel(self.green,g)
+        self.set_channel(self.blue,b)
+        self.on = (r>0) or (b>0) or (g>0)
+
+    def set_color(self, color):
+        self.color = color
+        v = rgb_colors[color]
+        self.set_rgb(v[0],v[1],v[2])
+        self.blinking = v[3]
+
+    async def _run(self):
+        while True:
+            await asyncio.sleep_ms(self.blink_delay)
+            if self.blinking:
+                if self.on:
+                    self.set_rgb(0,0,0)
+                else:
+                    v = rgb_colors[self.color]
+                    self.set_rgb(v[0], v[1], v[2])
 
 
 class DHTSensor:
@@ -150,6 +185,7 @@ class PMSSensor:
         self.display.show('aqi', self.aqi)
         self.display.show('aqismoke', self.aqismoke)
         self.display.show('pms_25', self.pm.pm25_env)
+        self.led.set_color(self.aqilevel)
 
 
 def set_global_exception():
@@ -168,7 +204,7 @@ async def main():
     display = Display(15,4,16)
     display.show('title')
     global rgb_led
-    rgb_led = RGBLed(23, 22, 19)
+    rgb_led = RGBLed(23, 19, 22)
     global dht_sensor
     dht_sensor = DHTSensor(display,17)
     global pms_sensor
