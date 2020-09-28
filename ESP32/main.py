@@ -2,7 +2,7 @@
 Air quality monitor in MicroPython using ESP32
 """
 __author__ = 'Juerg Beringer'
-__version__ = "0.1"
+__version__ = "0.2"
 
 import machine
 import ssd1306
@@ -142,6 +142,38 @@ class RGBLed:
                     self.set_rgb(v[0], v[1], v[2])
 
 
+class Buzzer:
+    """Control alarm buzzer."""
+
+    def __init__(self, buzzer_pin):
+        self.buzzer = machine.PWM(machine.Pin(buzzer_pin))
+        self.buzzer.duty(0)
+        self.freq = None
+        self.duration = None
+        self.pause = None
+        self.remaining_beeps = 0
+        asyncio.create_task(self._run())
+
+    def alarm(self, freq=700, duration=140, pause=30, no_of_beeps=60):
+        self.freq = freq
+        self.duration = duration
+        self.pause = pause
+        self.remaining_beeps = no_of_beeps
+
+    async def _run(self):
+        while True:
+            if self.remaining_beeps>0:
+                # The following is not super precise ...
+                self.buzzer.freq(self.freq)
+                self.buzzer.duty(512)
+                await asyncio.sleep_ms(self.duration)
+                self.buzzer.duty(0)
+                self.remaining_beeps -= 1
+                await asyncio.sleep_ms(self.pause)
+            else:
+                await asyncio.sleep_ms(2000)
+
+
 class DHTSensor:
     """Asynchronous measurement and display of temperature and humidity with DHT22 sensor."""
 
@@ -168,12 +200,15 @@ class DHTSensor:
 class PMSSensor:
     """PMS5003 particle concentration sensor."""
 
-    def __init__(self, display, led, to_pms_pin, from_pms_pin):
+    def __init__(self, display, buzzer, led, to_pms_pin, from_pms_pin):
         self.display = display
         self.led = led
         self.aqi = None
         self.aqismoke = None
         self.aqilevel = None
+        self.alarm_enable_threshold = 80    # alarm thresholds specified in terms of smoke AQI
+        self.alarm_disable_threshold = 50
+        self.alarm_on = False
         self.uart = machine.UART(1, tx=to_pms_pin, rx=from_pms_pin, baudrate=9600)
         self.pm = pms5003.PMS5003(self.uart)
         self.pm.registerCallback(self.show)
@@ -186,6 +221,11 @@ class PMSSensor:
         self.display.show('aqismoke', self.aqismoke)
         self.display.show('pms_25', self.pm.pm25_env)
         self.led.set_color(self.aqilevel)
+        if self.aqismoke>=self.alarm_enable_threshold and not self.alarm_on:
+            self.alarm_on = True
+            buzzer.alarm()
+        if self.aqismoke<=self.alarm_disable_threshold and self.alarm_on:
+            self.alarm_on = False
 
 
 def set_global_exception():
@@ -205,10 +245,12 @@ async def main():
     display.show('title')
     global rgb_led
     rgb_led = RGBLed(23, 19, 22)
+    global buzzer
+    buzzer = Buzzer(21)
     global dht_sensor
     dht_sensor = DHTSensor(display,17)
     global pms_sensor
-    pms_sensor = PMSSensor(display,rgb_led,14,27)
+    pms_sensor = PMSSensor(display,buzzer,rgb_led,14,27)
     global n_heartbeat
     n_heartbeat = 0
     delay = 100
