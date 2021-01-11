@@ -4,6 +4,8 @@ Air quality monitor in MicroPython using ESP32
 __author__ = 'Juerg Beringer'
 __version__ = "0.2"
 
+import math
+
 import machine
 import ssd1306
 import dht
@@ -19,6 +21,7 @@ display_config = {
     'title': ('Air Monitor v%s' % __version__,0,0),
     'dht_temp': ('%4.1fC',-16,3),
     'dht_humidity': ('%3.0f%%',-16,4),
+    'dewpoint': ('%4.1f',-16,5),
     'aqi': ('AQI = %3.0f', 0,3),
     'aqismoke': ('Smoke %3.0f', 0,4),
     'pms_25': ('%3i ug/m3',0,7),
@@ -181,8 +184,9 @@ class DHTSensor:
         self.display = display
         self.sensor = dht.DHT22(machine.Pin(dhtPin))
         self.interval = max(interval,2000)    # measurement interval in ms
-        self.temperature = 0
-        self.humidity = 0
+        self.temperature = 0.
+        self.humidity = 0.
+        self.dewpoint = 0.
         self.n_measurements = 0
         asyncio.create_task(self._run())
 
@@ -192,9 +196,17 @@ class DHTSensor:
             self.sensor.measure()
             self.temperature = self.sensor.temperature()
             self.humidity = self.sensor.humidity()
+            alpha = math.log(self.humidity/100.)+17.62*self.temperature/(243.12+self.temperature)
+            self.dewpoint = 243.12*alpha/(17.62-alpha)
             self.display.show('dht_temp', self.temperature)
             self.display.show('dht_humidity', self.humidity)
+            self.display.show('dewpoint', self.dewpoint)
             self.n_measurements += 1
+
+            # Temporary
+            f = open('dht.log','a')
+            f.write('%4.1fC   %4.1f%%   %4.1fC\n' % (self.temperature, self.humidity, self.dewpoint))
+            f.close()
 
 
 class PMSSensor:
@@ -244,13 +256,18 @@ async def main():
     display = Display(15,4,16)
     display.show('title')
     global rgb_led
-    rgb_led = RGBLed(23, 19, 22)
+    #rgb_led = RGBLed(23, 19, 22)
     global buzzer
-    buzzer = Buzzer(21)
+    #buzzer = Buzzer(21)
     global dht_sensor
-    dht_sensor = DHTSensor(display,17)
+    dht_sensor = DHTSensor(display,17,30000)
     global pms_sensor
-    pms_sensor = PMSSensor(display,buzzer,rgb_led,14,27)
+    #pms_sensor = PMSSensor(display,buzzer,rgb_led,14,27)
+
+    #vext = machine.Pin(21, machine.Pin.OUT)
+    #await asyncio.sleep_ms(10000)
+    #vext.on()
+
     global n_heartbeat
     n_heartbeat = 0
     delay = 100
