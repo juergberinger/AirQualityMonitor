@@ -21,7 +21,7 @@ display_config = {
     'title': ('Air Monitor v%s' % __version__,0,0),
     'dht_temp': ('%4.1fC',-16,3),
     'dht_humidity': ('%3.0f%%',-16,4),
-    'dewpoint': ('%4.1f',-16,5),
+    'dewpoint': ('dew %4.1fC',-16,5),
     'aqi': ('AQI = %3.0f', 0,3),
     'aqismoke': ('Smoke %3.0f', 0,4),
     'pms_25': ('%3i ug/m3',0,7),
@@ -107,18 +107,22 @@ class Display:
 
 class RGBLed:
 
-    def __init__(self, red_pin, green_pin, blue_pin, blink_delay=500):
+    def __init__(self, red_pin, green_pin, blue_pin, blink_delay=500, brightness=0.2):
         self.red = machine.PWM(machine.Pin(red_pin),freq=1000)
         self.green = machine.PWM(machine.Pin(green_pin),freq=1000)
         self.blue = machine.PWM(machine.Pin(blue_pin),freq=1000)
         self.blink_delay = blink_delay
-        self.set_color('b')
+        self.brightness = brightness
+        self.set_color('g')
         asyncio.create_task(self._run())
 
     def set_channel(self, pin, value):
         """Set LED color value to brightness between 0 and 255."""
         if value>255:
             value = 255
+        if value<0:
+            value = 0
+        value = 255 - value*self.brightness    # convert for common anode LED
         v = int(value/255.*1023.)
         pin.duty(v)
 
@@ -204,9 +208,9 @@ class DHTSensor:
             self.n_measurements += 1
 
             # Temporary
-            f = open('dht.log','a')
-            f.write('%4.1fC   %4.1f%%   %4.1fC\n' % (self.temperature, self.humidity, self.dewpoint))
-            f.close()
+            #f = open('dht.log','a')
+            #f.write('%4.1fC   %4.1f%%   %4.1fC\n' % (self.temperature, self.humidity, self.dewpoint))
+            #f.close()
 
 
 class PMSSensor:
@@ -256,13 +260,13 @@ async def main():
     display = Display(15,4,16)
     display.show('title')
     global rgb_led
-    #rgb_led = RGBLed(23, 19, 22)
+    rgb_led = RGBLed(23, 19, 22)
     global buzzer
-    #buzzer = Buzzer(21)
+    buzzer = Buzzer(18)
     global dht_sensor
-    dht_sensor = DHTSensor(display,17,30000)
+    dht_sensor = DHTSensor(display,17)
     global pms_sensor
-    #pms_sensor = PMSSensor(display,buzzer,rgb_led,14,27)
+    pms_sensor = PMSSensor(display,buzzer,rgb_led,14,27)
 
     #vext = machine.Pin(21, machine.Pin.OUT)
     #await asyncio.sleep_ms(10000)
