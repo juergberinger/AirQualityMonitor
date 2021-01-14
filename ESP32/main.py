@@ -11,6 +11,7 @@ import ssd1306
 import dht
 import uasyncio as asyncio
 import pms5003
+from scd30 import SCD30
 
 
 # Configuration and display
@@ -25,6 +26,7 @@ display_config = {
     'aqi': ('AQI = %3.0f', 0,3),
     'aqismoke': ('Smoke %3.0f', 0,4),
     'pms_25': ('%3i ug/m3',0,7),
+    'co2': ('CO2 %4.0f',0,6),
     'debug': ('debug %i/%i',-16,7)
 }
 
@@ -243,6 +245,22 @@ class PMSSensor:
         if self.aqismoke<=self.alarm_disable_threshold and self.alarm_on:
             self.alarm_on = False
 
+class CO2Sensor:
+
+    def __init__(self, display, interval=10000):
+        self.display = display
+        self.interval = interval
+        self.scd30 = SCD30(display.i2c, 0x61)
+        asyncio.create_task(self._run())
+
+    async def _run(self):
+        while True:
+            while self.scd30.get_status_ready() != 1:
+                await asyncio.sleep_ms(200)
+            (self.co2, self.temperature, self.humidity) = self.scd30.read_measurement()
+            self.display.show('co2', self.co2)
+            await asyncio.sleep_ms(self.interval)
+
 
 def set_global_exception():
     """Global exception handler to abort on unhandled exception."""
@@ -257,6 +275,7 @@ def set_global_exception():
 async def main():
     """Main routine creating sensors and showing heartbeat."""
     set_global_exception()
+    global display
     display = Display(15,4,16)
     display.show('title')
     global rgb_led
@@ -267,6 +286,8 @@ async def main():
     dht_sensor = DHTSensor(display,17)
     global pms_sensor
     pms_sensor = PMSSensor(display,buzzer,rgb_led,14,27)
+    global co2_sensor
+    co2_sensor = CO2Sensor(display)
 
     #vext = machine.Pin(21, machine.Pin.OUT)
     #await asyncio.sleep_ms(10000)
