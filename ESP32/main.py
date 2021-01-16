@@ -23,10 +23,10 @@ display_config = {
     'dht_temp': ('%4.1fC',-16,3),
     'dht_humidity': ('%3.0f%%',-16,4),
     'dewpoint': ('dew %4.1fC',-16,5),
-    'aqi': ('AQI = %3.0f', 0,3),
+    'aqi': ('AQI   %3.0f', 0,3),
     'aqismoke': ('Smoke %3.0f', 0,4),
     'pms_25': ('%3i ug/m3',0,7),
-    'co2': ('CO2 %4.0f',0,6),
+    'co2': ('CO2 %5.0fppm',0,5),
     'debug': ('debug %i/%i',-16,7)
 }
 
@@ -81,7 +81,7 @@ class Display:
     """Utility class to display data on SSD1306 display."""
 
     def __init__(self, scl_pin, sda_pin, out_pin):
-        self.i2c = machine.I2C(scl=machine.Pin(scl_pin), sda=machine.Pin(sda_pin))
+        self.i2c = machine.I2C(0, scl=machine.Pin(scl_pin), sda=machine.Pin(sda_pin))
         self.pin = machine.Pin(out_pin, machine.Pin.OUT)
         self.pin.value(0)  # set low to reset OLED
         self.pin.value(1)  # while OLED is running, must set high
@@ -206,7 +206,7 @@ class DHTSensor:
             self.dewpoint = 243.12*alpha/(17.62-alpha)
             self.display.show('dht_temp', self.temperature)
             self.display.show('dht_humidity', self.humidity)
-            self.display.show('dewpoint', self.dewpoint)
+            # self.display.show('dewpoint', self.dewpoint)
             self.n_measurements += 1
 
             # Temporary
@@ -247,13 +247,14 @@ class PMSSensor:
 
 class CO2Sensor:
 
-    def __init__(self, display, interval=10000):
+    def __init__(self, display, interval=1800):
         self.display = display
         self.interval = interval
         self.scd30 = SCD30(display.i2c, 0x61)
         asyncio.create_task(self._run())
 
     async def _run(self):
+        await asyncio.sleep_ms(4000)
         while True:
             while self.scd30.get_status_ready() != 1:
                 await asyncio.sleep_ms(200)
