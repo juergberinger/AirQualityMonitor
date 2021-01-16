@@ -16,6 +16,7 @@ from scd30 import SCD30
 
 # Configuration and display
 smoke_corr_factor = 0.48
+vbat_adccounts_per_V = 600
 
 display_config = {
     # each entry is a triple (text,x_pos,y_pos), negative pos_x means right-aligned text
@@ -28,6 +29,8 @@ display_config = {
     'pms_25': ('%3i ug/m3',0,7),
     'pms': ('%i/%i ug/m3',0,7),
     'co2': ('CO2 %5.0fppm',0,5),
+    'vbat': ('%3.1fV',-16,6),
+    'adc': ('adc %i',0,6),
     'debug': ('debug %i/%i',-16,7)
 }
 
@@ -292,6 +295,23 @@ class CO2Sensor:
             await asyncio.sleep_ms(self.interval)
 
 
+class BatteryMonitor:
+
+    def __init__(self, display, interval=5000):
+        self.display = display
+        self.interval = interval
+        self.adc = machine.ADC(machine.Pin(37))
+        self.adc.atten(machine.ADC.ATTN_11DB)
+        asyncio.create_task(self._run())
+
+    async def _run(self):
+        while True:
+            raw = self.adc.read()
+            # self.display.show('adc', raw)
+            self.display.show('vbat', round(raw/vbat_adccounts_per_V,1))
+            await asyncio.sleep_ms(self.interval)
+
+
 def set_global_exception():
     """Global exception handler to abort on unhandled exception."""
     def handle_exception(loop, context):
@@ -318,6 +338,8 @@ async def main():
     pms_sensor = PMSSensor(display,buzzer,rgb_led,14,27)
     global co2_sensor
     co2_sensor = CO2Sensor(display)
+    global battery_monitor
+    battery_monitor = BatteryMonitor(display)
 
     #vext = machine.Pin(21, machine.Pin.OUT)
     #await asyncio.sleep_ms(10000)
