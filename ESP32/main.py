@@ -26,12 +26,13 @@ display_config = {
     'aqi': ('AQI   %3.0f', 0,3),
     'aqismoke': ('Smoke %3.0f', 0,4),
     'pms_25': ('%3i ug/m3',0,7),
+    'pms': ('%i/%i ug/m3',0,7),
     'co2': ('CO2 %5.0fppm',0,5),
     'debug': ('debug %i/%i',-16,7)
 }
 
 rgb_colors = {
-    # each entry is a triple (red, green, blue, blinking) with colors in [0,255] and blinking = false/true
+    # each entry is a tuple (red, green, blue, blink flag) with colors in [0,255] and blink flag = false/true
     'b': (0, 0, 0, False),
     'g': (0, 100, 0, False),
     'y': (100, 100, 0, False),
@@ -77,6 +78,31 @@ def aqilevel(aqi):
         return 'm'
 
 
+class Average:
+    """Utility class to average measurements"""
+
+    def __init__(self, n_samples = 3):
+        self.n_samples = n_samples
+        self.sum = 0.
+        self.n_accumulated = 0
+        self.last_average = None
+
+    def fill(self, x):
+        """Fill new value. Returns True if new average is available."""
+        self.sum += x
+        self.n_accumulated += 1
+        if self.n_accumulated == self.n_samples:
+            self.last_average = self.sum / self.n_accumulated
+            self.sum = 0.
+            self.n_accumulated = 0
+            return True
+        else:
+            return False
+
+    def average(self):
+        return self.last_average
+
+
 class Display:
     """Utility class to display data on SSD1306 display."""
 
@@ -98,7 +124,7 @@ class Display:
         self.oled.text(text, posX * 8, posY * 8)
         self.oled.show()
 
-    def show(self, what, values=None):
+    def show(self, what, *values):
         """Show value on oled display as configured in global display_config dict."""
         fmt = display_config[what]
         if values is None:
@@ -228,7 +254,7 @@ class PMSSensor:
         self.alarm_disable_threshold = 50
         self.alarm_on = False
         self.uart = machine.UART(1, tx=to_pms_pin, rx=from_pms_pin, baudrate=9600)
-        self.pm = pms5003.PMS5003(self.uart)
+        self.pm = pms5003.PMS5003(self.uart)  # active mode, measurement every few seconds
         self.pm.registerCallback(self.show)
 
     def show(self):
@@ -237,7 +263,8 @@ class PMSSensor:
         self.aqilevel = aqilevel(self.aqismoke)
         self.display.show('aqi', self.aqi)
         self.display.show('aqismoke', self.aqismoke)
-        self.display.show('pms_25', self.pm.pm25_env)
+        #self.display.show('pms_25', self.pm.pm25_env)
+        self.display.show('pms', self.pm.pm10_env, self.pm.pm25_env)
         self.led.set_color(self.aqilevel)
         if self.aqismoke>=self.alarm_enable_threshold and not self.alarm_on:
             self.alarm_on = True
@@ -251,6 +278,7 @@ class CO2Sensor:
         self.display = display
         self.interval = interval
         self.scd30 = SCD30(display.i2c, 0x61)
+        self.avg = Average(5)
         asyncio.create_task(self._run())
 
     async def _run(self):
@@ -259,7 +287,8 @@ class CO2Sensor:
             while self.scd30.get_status_ready() != 1:
                 await asyncio.sleep_ms(200)
             (self.co2, self.temperature, self.humidity) = self.scd30.read_measurement()
-            self.display.show('co2', self.co2)
+            if self.avg.fill(self.co2):
+                self.display.show('co2', self.avg.average())
             await asyncio.sleep_ms(self.interval)
 
 
