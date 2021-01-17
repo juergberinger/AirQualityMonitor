@@ -194,6 +194,7 @@ class Buzzer:
         self.duration = None
         self.pause = None
         self.remaining_beeps = 0
+        self.alarm(no_of_beeps=1)
         asyncio.create_task(self._run())
 
     def alarm(self, freq=700, duration=140, pause=30, no_of_beeps=60):
@@ -383,6 +384,7 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-    # For debugging comment out the line above and uncomment the lines below, then run asyncio.run(main()) from REPL
+    # For debugging: comment out line above and uncomment lines below, then run asyncio.run(main()) from REPL
     #pms5003.set_debug(True)
     #pms5003.WAIT_AFTER_WAKEUP = 30
+    pass
