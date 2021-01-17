@@ -2,7 +2,7 @@
 Air quality monitor in MicroPython using ESP32
 """
 __author__ = 'Juerg Beringer'
-__version__ = "0.2"
+__version__ = "0.3"
 
 import math
 
@@ -17,6 +17,8 @@ from scd30 import SCD30
 # Configuration and display
 smoke_corr_factor = 0.48
 vbat_adccounts_per_V = 600
+vbat_max = 4.2
+vbat_min = 3.2
 
 display_config = {
     # each entry is a triple (text,x_pos,y_pos), negative pos_x means right-aligned text
@@ -27,9 +29,10 @@ display_config = {
     'aqi': ('AQI   %3.0f', 0,3),
     'aqismoke': ('Smoke %3.0f', 0,4),
     'pms_25': ('%3i ug/m3',0,7),
-    'pms': ('%i/%i ug/m3',0,7),
-    'co2': ('CO2 %5.0fppm',0,5),
-    'vbat': ('%3.1fV',-16,6),
+    'pms': ('%3i / %3i ug/m3',0,5),
+    'co2': ('CO2 %5.0f ppm',0,6),
+    'vbat': ('%3.1fV %i%%',0,7),
+    'msg': ('%-6s', 9, 7),
     'adc': ('adc %i',0,6),
     'debug': ('debug %i/%i',-16,7)
 }
@@ -143,6 +146,7 @@ class RGBLed:
         self.green = machine.PWM(machine.Pin(green_pin),freq=1000)
         self.blue = machine.PWM(machine.Pin(blue_pin),freq=1000)
         self.blink_delay = blink_delay
+        self.blinking = False
         self.brightness = brightness
         self.set_color('g')
         asyncio.create_task(self._run())
@@ -302,13 +306,23 @@ class BatteryMonitor:
         self.interval = interval
         self.adc = machine.ADC(machine.Pin(37))
         self.adc.atten(machine.ADC.ATTN_11DB)
+        self.lowbat = False
         asyncio.create_task(self._run())
 
     async def _run(self):
         while True:
             raw = self.adc.read()
             # self.display.show('adc', raw)
-            self.display.show('vbat', round(raw/vbat_adccounts_per_V,1))
+            vbat = raw/vbat_adccounts_per_V
+            vbatrel = round(100.*(vbat-vbat_min)/(vbat_max-vbat_min),0)
+            self.display.show('vbat', round(vbat,1), vbatrel)
+            if vbatrel<20:
+                self.display.show('msg', 'LOWBAT')
+                self.lowbat = True
+            elif self.lowbat:
+                self.lowbat = False
+                self.display.show('msg', ' ')
+            # FIXME: put board to sleep if vbatrel<5
             await asyncio.sleep_ms(self.interval)
 
 
@@ -328,6 +342,7 @@ async def main():
     global display
     display = Display(15,4,16)
     display.show('title')
+    display.show('msg', 'POWON')
     global rgb_led
     rgb_led = RGBLed(23, 19, 22)
     global buzzer
@@ -341,6 +356,7 @@ async def main():
     global battery_monitor
     battery_monitor = BatteryMonitor(display)
 
+    # WARNING: HiLetgo board can be damaged if vext is set off while ADC on GPIO37 is enabled!
     #vext = machine.Pin(21, machine.Pin.OUT)
     #await asyncio.sleep_ms(10000)
     #vext.on()
@@ -352,6 +368,8 @@ async def main():
     pos_y = 7
     while True:
         #display.show('debug', (dht_sensor.n_measurements, n_heartbeat))
+        if n_heartbeat == 22:
+            display.show('msg', ' ')   # clear startup msg once all info is shown
         display.write('|',pos_x, pos_y)
         await asyncio.sleep_ms(delay)
         display.write('/', pos_x, pos_y)
