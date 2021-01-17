@@ -148,7 +148,7 @@ class RGBLed:
         self.blink_delay = blink_delay
         self.blinking = False
         self.brightness = brightness
-        self.set_color('g')
+        self.set_color('b')
         asyncio.create_task(self._run())
 
     def set_channel(self, pin, value):
@@ -350,7 +350,7 @@ async def main():
     global dht_sensor
     dht_sensor = DHTSensor(display,17)
     global pms_sensor
-    pms_sensor = PMSSensor(display,buzzer,rgb_led,14,27)
+    pms_sensor = PMSSensor(display,buzzer,rgb_led,12,27)
     global co2_sensor
     co2_sensor = CO2Sensor(display)
     global battery_monitor
@@ -368,7 +368,7 @@ async def main():
     pos_y = 7
     while True:
         #display.show('debug', (dht_sensor.n_measurements, n_heartbeat))
-        if n_heartbeat == 22:
+        if n_heartbeat == 53:
             display.show('msg', ' ')   # clear startup msg once all info is shown
         display.write('|',pos_x, pos_y)
         await asyncio.sleep_ms(delay)
@@ -383,3 +383,6 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+    # For debugging comment out the line above and uncomment the lines below, then run asyncio.run(main()) from REPL
+    #pms5003.set_debug(True)
+    #pms5003.WAIT_AFTER_WAKEUP = 30
