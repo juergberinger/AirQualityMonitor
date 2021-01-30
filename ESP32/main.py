@@ -16,23 +16,25 @@ from scd30 import SCD30
 
 # Configuration and display
 smoke_corr_factor = 0.48
-vbat_adccounts_per_V = 600
-vbat_max = 4.2
-vbat_min = 3.2
+vbat_adccounts_per_V = 470
+vbat_max = 4.05
+vbat_min = 3.0
+show_adc_counts = False
+
 
 display_config = {
     # each entry is a triple (text,x_pos,y_pos), negative pos_x means right-aligned text
     'title': ('Air Monitor v%s' % __version__,0,0),
-    'dht_temp': ('%4.1fC',-16,3),
-    'dht_humidity': ('%3.0f%%',-16,4),
-    'dewpoint': ('dew %4.1fC',-16,5),
-    'aqi': ('AQI   %3.0f', 0,3),
-    'aqismoke': ('Smoke %3.0f', 0,4),
-    'pms_25': ('%3i ug/m3',0,7),
-    'pms': ('%3i / %3i ug/m3',0,5),
-    'co2': ('CO2 %5.0f ppm',0,6),
-    'vbat': ('%3.1fV %i%%',0,7),
-    'msg': ('%-6s', 9, 7),
+    'dht_temp': ('%4.1fC',-16,2),
+    'dht_humidity': ('%3.0f%%',-16,3),
+    'dewpoint': ('dew %4.1fC',-16,4),
+    'aqi': ('AQI   %3.0f', 0,2),
+    'aqismoke': ('Smoke %3.0f', 0,3),
+    'pms_25': ('%3i ug/m3',0,6),
+    'pms': ('%3i / %3i ug/m3',0,4),
+    'co2': ('CO2 %5.0f ppm',0,5),
+    'vbat': ('%3.1fV %3i%%',0,7),
+    'msg': ('%-6s', 10, 7),
     'adc': ('adc %i',0,6),
     'debug': ('debug %i/%i',-16,7)
 }
@@ -313,9 +315,11 @@ class BatteryMonitor:
     async def _run(self):
         while True:
             raw = self.adc.read()
-            # self.display.show('adc', raw)
+            if show_adc_counts:
+                self.display.show('adc', raw)
             vbat = raw/vbat_adccounts_per_V
             vbatrel = round(100.*(vbat-vbat_min)/(vbat_max-vbat_min),0)
+            vbatrel = min(max(vbatrel,0),100)
             self.display.show('vbat', round(vbat,1), vbatrel)
             if vbatrel<20:
                 self.display.show('msg', 'LOWBAT')
@@ -340,6 +344,10 @@ def set_global_exception():
 async def main():
     """Main routine creating sensors and showing heartbeat."""
     set_global_exception()
+    # Enable Vext (set GPIO21 to low)
+    # WARNING: HiLetgo board can be damaged if GPIO21 is high while ADC on GPIO37 is enabled!
+    #          If you switch GPIO21 on, ie Vext off, make sure to first disable battery monitoring ADC.
+    vextCtrl = machine.Pin(21, machine.Pin.OUT, value=0)
     global display
     display = Display(15,4,16)
     display.show('title')
@@ -356,11 +364,6 @@ async def main():
     co2_sensor = CO2Sensor(display)
     global battery_monitor
     battery_monitor = BatteryMonitor(display)
-
-    # WARNING: HiLetgo board can be damaged if vext is set off while ADC on GPIO37 is enabled!
-    #vext = machine.Pin(21, machine.Pin.OUT)
-    #await asyncio.sleep_ms(10000)
-    #vext.on()
 
     global n_heartbeat
     n_heartbeat = 0
